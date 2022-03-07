@@ -741,14 +741,18 @@ def prepare_eval_dict(detections, groundtruth, features):
         groundtruth[fields.InputDataFields.groundtruth_labeled_classes],
         label_id_offset_paddings)
 
-  use_original_images = fields.InputDataFields.original_image in features
+  # use_original_images = fields.InputDataFields.original_image in features
+  use_original_images = False
   if use_original_images:
     eval_images = features[fields.InputDataFields.original_image]
     true_image_shapes = features[fields.InputDataFields.true_image_shape][:, :3]
     original_image_spatial_shapes = features[
         fields.InputDataFields.original_image_spatial_shape]
   else:
-    eval_images = features[fields.InputDataFields.image]
+    # eval_images = features[fields.InputDataFields.image]
+    channel_offset = [0.485, 0.456, 0.406]
+    channel_scale = [0.229, 0.224, 0.225]
+    eval_images = tf.cast((features[fields.InputDataFields.image] * [[channel_scale]] + [[channel_offset]]) * 255, tf.uint8)
     true_image_shapes = None
     original_image_spatial_shapes = None
 
@@ -973,6 +977,8 @@ def eval_continuously(
     wait_interval=180,
     timeout=3600,
     eval_index=0,
+    run_once=False,
+    latest_checkpoint=None,
     **kwargs):
   """Run continuous evaluation of a detection model eagerly.
 
@@ -1004,7 +1010,7 @@ def eval_continuously(
       will terminate if no new checkpoints are found after these many seconds.
     eval_index: int, If given, only evaluate the dataset at the given
       index. By default, evaluates dataset at 0'th index.
-
+    run_once: boolean, If True, run evaluation loop only once.
     **kwargs: Additional keyword arguments for configuration override.
   """
   get_configs_from_pipeline_file = MODEL_BUILD_UTIL_MAP[
@@ -1060,20 +1066,41 @@ def eval_continuously(
   global_step = tf.compat.v2.Variable(
       0, trainable=False, dtype=tf.compat.v2.dtypes.int64)
 
-  for latest_checkpoint in tf.train.checkpoints_iterator(
-      checkpoint_dir, timeout=timeout, min_interval_secs=wait_interval):
-    ckpt = tf.compat.v2.train.Checkpoint(
-        step=global_step, model=detection_model)
+  if not run_once:
+    for latest_checkpoint in tf.train.checkpoints_iterator(
+          checkpoint_dir, timeout=timeout, min_interval_secs=wait_interval):
+        ckpt = tf.compat.v2.train.Checkpoint(
+            step=global_step, model=detection_model)
 
-    ckpt.restore(latest_checkpoint).expect_partial()
+        ckpt.restore(latest_checkpoint).expect_partial()
 
-    summary_writer = tf.compat.v2.summary.create_file_writer(
-        os.path.join(model_dir, 'eval', eval_input_config.name))
-    with summary_writer.as_default():
-      eager_eval_loop(
-          detection_model,
-          configs,
-          eval_input,
-          use_tpu=use_tpu,
-          postprocess_on_cpu=postprocess_on_cpu,
-          global_step=global_step)
+        summary_writer = tf.compat.v2.summary.create_file_writer(
+            os.path.join(model_dir, 'eval', eval_input_config.name))
+        with summary_writer.as_default():
+          eager_eval_loop(
+              detection_model,
+              configs,
+              eval_input,
+              use_tpu=use_tpu,
+              postprocess_on_cpu=postprocess_on_cpu,
+              global_step=global_step)
+  else:
+    if latest_checkpoint is None:
+        latest_checkpoint = next(tf.train.checkpoints_iterator(
+                  checkpoint_dir, timeout=0, min_interval_secs=0))
+    if latest_checkpoint is not None:
+      ckpt = tf.compat.v2.train.Checkpoint(
+          step=global_step, model=detection_model)
+
+      ckpt.restore(latest_checkpoint).expect_partial()
+
+      summary_writer = tf.compat.v2.summary.create_file_writer(
+          os.path.join(model_dir, 'eval', eval_input_config.name))
+      with summary_writer.as_default():
+          eager_eval_loop(
+              detection_model,
+              configs,
+              eval_input,
+              use_tpu=use_tpu,
+              postprocess_on_cpu=postprocess_on_cpu,
+              global_step=global_step)

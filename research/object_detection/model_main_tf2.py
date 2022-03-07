@@ -67,7 +67,13 @@ flags.DEFINE_integer(
 flags.DEFINE_boolean('record_summaries', True,
                      ('Whether or not to record summaries during'
                       ' training.'))
-
+flags.DEFINE_boolean(
+    'run_once', False, 'If running in eval-only mode, whether to run just '
+    'one round of eval vs running continuously (default).'
+)
+flags.DEFINE_boolean(
+    'last_checkpoint', None, 'path to last checkpoint, ignored if not "run_once"'
+)
 FLAGS = flags.FLAGS
 
 
@@ -85,7 +91,7 @@ def main(unused_argv):
         sample_1_of_n_eval_on_train_examples=(
             FLAGS.sample_1_of_n_eval_on_train_examples),
         checkpoint_dir=FLAGS.checkpoint_dir,
-        wait_interval=300, timeout=FLAGS.eval_timeout)
+        wait_interval=300, timeout=FLAGS.eval_timeout, run_once=FLAGS.run_once)
   else:
     if FLAGS.use_tpu:
       # TPU is automatically inferred if tpu_name is None and

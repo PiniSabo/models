@@ -798,7 +798,7 @@ def create_estimator_and_inputs(run_config,
   train_input_config = configs['train_input_config']
   eval_config = configs['eval_config']
   eval_input_configs = configs['eval_input_configs']
-  eval_on_train_input_config = copy.deepcopy(train_input_config)
+  eval_on_train_input_config = copy.deepcopy(train_input_fconfig)
   eval_on_train_input_config.sample_1_of_n_examples = (
       sample_1_of_n_eval_on_train_examples)
   if override_eval_num_epochs and eval_on_train_input_config.num_epochs != 1:

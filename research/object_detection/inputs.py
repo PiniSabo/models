@@ -1000,11 +1000,19 @@ def eval_input(eval_config, eval_input_config, model_config,
     image_resizer_fn = image_resizer_builder.build(image_resizer_config)
     keypoint_type_weight = eval_input_config.keypoint_type_weight or None
 
+    data_augmentation_options = [
+        preprocessor_builder.build(step)
+        for step in eval_config.data_augmentation_options
+    ]
+    data_augmentation_fn = functools.partial(
+        augment_input_data,
+        data_augmentation_options=data_augmentation_options)
+
     transform_data_fn = functools.partial(
         transform_input_data, model_preprocess_fn=model_preprocess_fn,
         image_resizer_fn=image_resizer_fn,
         num_classes=num_classes,
-        data_augmentation_fn=None,
+        data_augmentation_fn=data_augmentation_fn,
         retain_original_image=eval_config.retain_original_images,
         retain_original_image_additional_channels=
         eval_config.retain_original_image_additional_channels,

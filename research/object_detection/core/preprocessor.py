@@ -1347,6 +1347,9 @@ def _strict_random_crop_image(image,
                               aspect_ratio_range=(0.75, 1.33),
                               area_range=(0.1, 1.0),
                               overlap_thresh=0.3,
+                              fixed_size_mode=False,
+                              crop_dimensions=[1024, 1024],
+                              max_attempts=100,
                               clip_boxes=True,
                               preprocess_vars_cache=None):
   """Performs random crop.
@@ -1355,6 +1358,10 @@ def _strict_random_crop_image(image,
   is consistent with the original keypoint encoding for non-existing keypoints.
   This function always crops the image and is supposed to be used by
   `random_crop_image` function which sometimes returns the image unchanged.
+
+  Note: In 'fixed_size_mode' (described below in args section), the
+  `min_object_covered` argument is ignored. The generator_func is written
+  to look for cropped areas of the image which contain at least one object.
 
   Args:
     image: rank 3 float32 tensor containing 1 image -> [height, width, channels]
@@ -1400,6 +1407,11 @@ def _strict_random_crop_image(image,
                 original image.
     overlap_thresh: minimum overlap thresh with new cropped
                     image to keep the box.
+    fixed_size_mode: If this boolean is set to True, the crops generated are
+                     of the dimensions given by crop_dimensions.
+                     aspect_ratio_range and area_range are ignored.
+    crop_dimensions: Size (in pixels) of crops to be taken from image.
+                     Format is [height, width].
     clip_boxes: whether to clip the boxes to the cropped image.
     preprocess_vars_cache: PreprocessorCache object that records previously
                            performed augmentations. Updated in-place. If this
@@ -1447,16 +1459,52 @@ def _strict_random_crop_image(image,
     boxes_expanded = tf.expand_dims(
         tf.clip_by_value(
             boxes, clip_value_min=0.0, clip_value_max=1.0), 1)
-
-    generator_func = functools.partial(
-        tf.image.sample_distorted_bounding_box,
-        image_shape,
-        bounding_boxes=boxes_expanded,
-        min_object_covered=min_object_covered,
-        aspect_ratio_range=aspect_ratio_range,
-        area_range=area_range,
-        max_attempts=100,
-        use_image_if_no_bounding_boxes=True)
+    if fixed_size_mode:
+      crop_dimensions = tf.cast(crop_dimensions, tf.int32)
+      def generator_func():
+        offset_height = tf.random_uniform(
+            [max_attempts], 0,
+            tf.cast(tf.maximum(image_shape[0]-crop_dimensions[0], 1), tf.int32),
+            dtype=tf.int32)
+        offset_width = tf.random_uniform(
+            [max_attempts], 0,
+            tf.cast(tf.maximum(image_shape[1]-crop_dimensions[1], 1), tf.int32),
+            dtype=tf.int32)
+        generated_bboxes = tf.cast(
+            tf.stack([
+                offset_height/image_shape[0],
+                offset_width/image_shape[1],
+                tf.minimum(offset_height+crop_dimensions[0], image_shape[0])/image_shape[0],
+                tf.minimum(offset_width+crop_dimensions[1], image_shape[1])/image_shape[1]
+            ],
+            1), tf.float32)
+        boxlist_bbox_options = box_list.BoxList(generated_bboxes)
+        boxlist_gt_boxes = box_list.BoxList(boxes)
+        ioa_tensor = box_list_ops.ioa(boxlist_bbox_options, boxlist_gt_boxes)
+        crop_candidates = tf.where(
+            tf.reduce_any(tf.greater(ioa_tensor, overlap_thresh), axis=1))
+        chosen_crop_index = tf.cond(
+            tf.size(crop_candidates) > 0,
+            lambda : crop_candidates[0,0],
+            lambda : tf.constant(0, dtype=tf.int64))
+        begin = tf.stack([
+            offset_height[chosen_crop_index],
+            offset_width[chosen_crop_index], 0])
+        size = tf.stack([tf.minimum(crop_dimensions[0], image_shape[0]),
+                         tf.minimum(crop_dimensions[1], image_shape[1]),
+                         -1])
+        bboxes = tf.reshape(generated_bboxes[chosen_crop_index], [1,1,4])
+        return (begin, size, bboxes)
+    else:
+        generator_func = functools.partial(
+            tf.image.sample_distorted_bounding_box,
+            image_shape,
+            bounding_boxes=boxes_expanded,
+            min_object_covered=min_object_covered,
+            aspect_ratio_range=aspect_ratio_range,
+            area_range=area_range,
+            max_attempts=100,
+            use_image_if_no_bounding_boxes=True)
 
     # for ssd cropping, each value of min_object_covered has its own
     # cached random variable
@@ -1587,6 +1635,8 @@ def random_crop_image(image,
                       aspect_ratio_range=(0.75, 1.33),
                       area_range=(0.1, 1.0),
                       overlap_thresh=0.3,
+                      fixed_size_mode=False,
+                      crop_dimensions=[1024, 1024],
                       clip_boxes=True,
                       random_coef=0.0,
                       seed=None,
@@ -1605,6 +1655,10 @@ def random_crop_image(image,
   Note: Keypoint coordinates that are outside the crop will be set to NaN, which
   is consistent with the original keypoint encoding for non-existing keypoints.
   Also, the keypoint visibility will be set to False.
+
+  Note: In 'fixed_size_mode' (described below in args section), the
+  `min_object_covered` argument is ignored. The generator_func is written
+  to look for cropped areas of the image which contain at least one object.
 
   Args:
     image: rank 3 float32 tensor contains 1 image -> [height, width, channels]
@@ -1650,6 +1704,11 @@ def random_crop_image(image,
                 original image.
     overlap_thresh: minimum overlap thresh with new cropped
                     image to keep the box.
+    fixed_size_mode: If this boolean is set to True, the crops generated are
+                     of the dimensions given by crop_dimensions.
+                     aspect_ratio_range and area_range are ignored.
+    crop_dimensions: Size (in pixels) of crops to be taken from image.
+                     Format is [height, width].
     clip_boxes: whether to clip the boxes to the cropped image.
     random_coef: a random coefficient that defines the chance of getting the
                  original image. If random_coef is 0, we will always get the
@@ -1704,6 +1763,8 @@ def random_crop_image(image,
         aspect_ratio_range=aspect_ratio_range,
         area_range=area_range,
         overlap_thresh=overlap_thresh,
+        fixed_size_mode=fixed_size_mode,
+        crop_dimensions=crop_dimensions,
         clip_boxes=clip_boxes,
         preprocess_vars_cache=preprocess_vars_cache)
 

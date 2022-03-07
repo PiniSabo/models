@@ -149,6 +149,11 @@ def main(_):
   with tf.io.gfile.GFile(FLAGS.pipeline_config_path, 'r') as f:
     text_format.Merge(f.read(), pipeline_config)
   text_format.Merge(FLAGS.config_override, pipeline_config)
+
+  # if os.path.isdir(FLAGS.trained_checkpoint_prefix):
+  #   FLAGS.trained_checkpoint_prefix = os.path.join(FLAGS.trained_checkpoint_prefix,
+  #                                                  'ckpt-' + max([ckpt.split('-')[1].split('.')[0] for ckpt in glob.glob(os.path.join(FLAGS.trained_checkpoint_prefix, 'ckpt-*'))]))
+
   exporter_lib_v2.export_inference_graph(
       FLAGS.input_type, pipeline_config, FLAGS.trained_checkpoint_dir,
       FLAGS.output_directory, FLAGS.use_side_inputs, FLAGS.side_input_shapes,

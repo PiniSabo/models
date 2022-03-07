@@ -1,6 +1,7 @@
 syntax = "proto2";
 
 package object_detection.protos;
+import "object_detection/protos/preprocessor.proto";
 
 // Message for configuring DetectionModel evaluation jobs (eval.py).
 // Next id - 36
@@ -118,6 +119,9 @@ message EvalConfig {
   // will be ignored. This is useful for evaluating on test data that are not
   // exhaustively labeled.
   optional bool skip_predictions_for_unlabeled_class = 33 [default = false];
+
+  // add data augmentation options to eval (wasn't there originally)
+  repeated PreprocessingStep data_augmentation_options = 36;
 }
 
 // A message to configure parameterized evaluation metric.

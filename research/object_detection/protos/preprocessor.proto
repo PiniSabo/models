@@ -46,6 +46,7 @@ message PreprocessingStep {
     RandomSquareCropByScale random_square_crop_by_scale = 37;
     RandomScaleCropAndPadToSquare random_scale_crop_and_pad_to_square = 38;
     AdjustGamma adjust_gamma = 39;
+    RandomCropToFixedSizeImage random_crop_to_fixed_size_image = 40;
   }
 }
 
@@ -190,6 +191,25 @@ message RandomCropImage {
 
   // Probability of keeping the original image.
   optional float random_coef = 7 [default=0.0];
+}
+
+message RandomCropToFixedSizeImage {
+  // Cropped image must cover at least one box by this fraction.
+  // NOT CURRENTLY USED
+  optional float min_object_covered = 1 [default=1.0];
+
+  // Size of crop to take from image, in pixels.
+  optional float crop_height = 2 [default=1025];
+  optional float crop_width = 3 [default=3073];
+
+  // Minimum overlap threshold of cropped boxes to keep in new image. If the
+  // ratio between a cropped bounding box and the original is less than this
+  // value, it is removed from the new image.
+  // NOT CURRENTLY USED
+  optional float overlap_thresh = 4 [default=0.3];
+
+  // Probability of keeping the original image.
+  optional float random_coef = 5 [default=0.0];
 }
 
 // Randomly adds padding to the image.

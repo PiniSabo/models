@@ -187,6 +187,18 @@ def build(preprocessor_step_config):
                 'random_coef': config.random_coef,
             })
 
+  if step_type == 'random_crop_to_fixed_size_image':
+    config = preprocessor_step_config.random_crop_to_fixed_size_image
+    return (preprocessor.random_crop_image,
+            {
+                'min_object_covered': config.min_object_covered,
+                'crop_dimensions': (config.crop_height,
+                                    config.crop_width),
+                'overlap_thresh': config.overlap_thresh,
+                'random_coef': config.random_coef,
+                'fixed_size_mode': True,
+            })
+
   if step_type == 'random_pad_image':
     config = preprocessor_step_config.random_pad_image
     min_image_size = None

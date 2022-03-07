@@ -274,3 +274,50 @@ def manual_stepping(global_step, boundaries, rates, warmup=False):
                          name='learning_rate')
 
   return _learning_rate_return_value(eager_decay_rate)
+
+
+def cyclical_learning_rate(global_step,
+        boundaries,
+        base_lrs, max_lrs, stepsizes, name=None):
+  if global_step is None:
+    raise ValueError('global_step is required for cyclical learning rate')
+  if any([b < 0 for b in boundaries]) or any(
+      [not isinstance(b, int) for b in boundaries]):
+    raise ValueError('boundaries must be a list of positive integers')
+  if any([bnext <= b for bnext, b in zip(boundaries[1:], boundaries[:-1])]):
+    raise ValueError('Entries in boundaries must be strictly increasing.')
+  with ops.name_scope(name, 'CyclicalLearningRate',
+                      [global_step, base_lrs, max_lrs, stepsizes]) as name:
+    base_lrs = ops.convert_to_tensor(base_lrs, name='base_lr')
+    dtype = base_lrs.dtype
+    max_lrs = math_ops.cast(max_lrs, dtype)
+    stepsizes = math_ops.cast(stepsizes, dtype)
+    global_step_cast = math_ops.cast(global_step, dtype)
+    step_boundaries = tf.constant(boundaries, dtype)
+    assert_step_after_boundaries = tf.Assert(tf.greater_equal(global_step_cast, boundaries[0]), ['global_step is less than step in first schedule entry for cyclical learning rate'])
+
+    unreached_boundaries = tf.reshape(
+            tf.where(tf.greater(step_boundaries, global_step_cast)), [-1])
+    unreached_boundaries = tf.concat([unreached_boundaries, [len(boundaries)]], 0)
+    with tf.control_dependencies([assert_step_after_boundaries]):
+      index = tf.subtract(tf.reshape(tf.reduce_min(unreached_boundaries), [1]), 1)
+    previous_boundary = tf.cond(tf.reshape(tf.equal(tf.constant(0,dtype=index.dtype), index), []),
+            lambda : tf.constant(0, dtype=step_boundaries.dtype),
+            lambda : tf.reshape(tf.slice(step_boundaries, tf.subtract(index, tf.constant(1, dtype=index.dtype)), [1]), []))
+    global_step_from_boundary = tf.subtract(global_step_cast, previous_boundary)
+
+    base_lr = tf.reshape(tf.slice(base_lrs, index, [1]), [])
+    max_lr = tf.reshape(tf.slice(max_lrs, index, [1]), [])
+    stepsize = tf.reshape(tf.slice(stepsizes, index, [1]), [])
+
+    def cyclical_lr():
+      inc_or_dec = tf.mod(tf.floordiv(global_step_from_boundary, stepsize),
+                          ops.convert_to_tensor(2, dtype))
+      step_mod_stepsize = tf.mod(global_step_from_boundary, stepsize)
+      slope = tf.divide(tf.subtract(max_lr, base_lr), stepsize)
+      lr = tf.cond(tf.less(tf.cast(inc_or_dec, tf.float32), tf.convert_to_tensor(0.01, dtype)),
+                   lambda: tf.add(tf.multiply(step_mod_stepsize, slope), base_lr),
+                   lambda: tf.subtract(max_lr, tf.multiply(step_mod_stepsize, slope)))
+      return lr
+    return cyclical_lr()
+
