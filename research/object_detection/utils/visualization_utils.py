@@ -171,7 +171,8 @@ def draw_bounding_box_on_image(image,
                                color='red',
                                thickness=4,
                                display_str_list=(),
-                               use_normalized_coordinates=True):
+                               use_normalized_coordinates=True,
+                               put_on_top=False):
   """Adds a bounding box to an image.
 
   Bounding box coordinates can be specified in either absolute (pixel) or
@@ -220,20 +221,25 @@ def draw_bounding_box_on_image(image,
   # Each display_str has a top and bottom margin of 0.05x.
   total_display_str_height = (1 + 2 * 0.05) * sum(display_str_heights)
 
-  if top > total_display_str_height:
+  text_bottom = bottom + total_display_str_height
+  if text_bottom > image.size[1]:
     text_bottom = top
-  else:
-    text_bottom = bottom + total_display_str_height
+
   # Reverse list and print from bottom to top.
   for display_str in display_str_list[::-1]:
     text_width, text_height = font.getsize(display_str)
     margin = np.ceil(0.05 * text_height)
-    draw.rectangle(
-        [(left, text_bottom - text_height - 2 * margin), (left + text_width,
-                                                          text_bottom)],
-        fill=color)
+
+
+
+    if put_on_top:
+        text_y_coord = top - text_height - margin
+        draw.rectangle([(left, top - text_height - 2 * margin), (left + text_width, top)], fill=color)
+    else:
+        draw.rectangle([(left, text_bottom - text_height - 2 * margin), (left + text_width, text_bottom)], fill=color)
+        text_y_coord = text_bottom - text_height - margin
     draw.text(
-        (left + margin, text_bottom - text_height - margin),
+        (left + margin, text_y_coord),
         display_str,
         fill='black',
         font=font)
